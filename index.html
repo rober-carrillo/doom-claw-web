@@ -133,6 +133,13 @@
 
         .curated-feeds {
             display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 0;
+            margin: 15px 0 0 0;
+            display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 12px;
             margin-top: 15px;
@@ -480,6 +487,32 @@
         }
 
         @media (max-width: 768px) {
+            body {
+                padding: 10px 5px;
+            }
+            
+            .container {
+                padding: 0;
+            }
+            
+            .curated-feeds {
+                grid-template-columns: 1fr;
+                gap: 10px;
+                padding: 0;
+                margin: 0;
+            }
+            
+            .feed-checkbox {
+                margin: 0;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            
+            .panel {
+                padding: 15px 12px;
+                margin: 10px 0;
+            }
+            
             h1 {
                 font-size: 2rem;
             }
@@ -509,9 +542,9 @@
         
         .chinese-text rt {
             font-size: 0.5em;
-            color: #888888;
+            color: #000000;
             font-weight: 300;
-            opacity: 0.8;
+            opacity: 1;
             text-align: center;
             display: block;
             line-height: 1.1;
@@ -525,46 +558,7 @@
             line-height: 1.3;
         }
     </style>
-    <!-- Pinyin conversion library -->
-    <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.14.0/dist/index.js" onload="console.log('Pinyin library script loaded')"></script>
-    <script>
-        // Wait for pinyin-pro to load and make it globally available
-        (function() {
-            function initPinyin() {
-                // Try different ways the library might be exposed
-                if (typeof pinyinPro !== 'undefined') {
-                    window.pinyinPro = pinyinPro;
-                    console.log('✅ Pinyin library loaded: pinyinPro');
-                    return true;
-                } else if (typeof window.pinyinPro !== 'undefined') {
-                    console.log('✅ Pinyin library loaded: window.pinyinPro');
-                    return true;
-                } else if (typeof pinyin !== 'undefined') {
-                    window.pinyinPro = { pinyin: pinyin };
-                    console.log('✅ Pinyin library loaded: pinyin');
-                    return true;
-                }
-                return false;
-            }
-            
-            // Try immediately
-            if (!initPinyin()) {
-                // Try on load
-                window.addEventListener('load', function() {
-                    if (!initPinyin()) {
-                        console.warn('⚠️ Pinyin library not found after page load');
-                    }
-                });
-                
-                // Also try after a short delay
-                setTimeout(function() {
-                    if (!initPinyin()) {
-                        console.warn('⚠️ Pinyin library not found after delay');
-                    }
-                }, 1000);
-            }
-        })();
-    </script>
+    <!-- Pinyin is now generated on the backend (Apify Actor) using pinyin-pro library -->
 </head>
 <body>
     <div class="container">
@@ -574,7 +568,7 @@
         </header>
 
         <div class="panel">
-            <h2 class="section-title">📰 Select Your Sources</h2>
+            <h2 class="section-title">Select Your Sources</h2>
             
             <div class="form-group">
                 <label>Choose from curated sources (check to enable)</label>
@@ -1009,7 +1003,7 @@
             document.getElementById('feedPanel').style.display = 'none';
             document.getElementById('debugConsole').innerHTML = '';
 
-            showStatus('🦞 Pulling from feeds and processing with AI...', 'info');
+            showStatus('Pulling from feeds and processing with AI...', 'info');
 
             try {
                 // OpenAI API key is stored in Apify Actor's secrets, not needed here
@@ -1110,13 +1104,13 @@
                     const elapsed = Math.floor((Date.now() - startedAt) / 1000);
                     
                     updateDebugConsole([
-                        `📊 Status: ${status}`,
-                        `⏱️  Running for ${elapsed}s`
+                        `Status: ${status}`,
+                        `Running for ${elapsed}s`
                     ]);
                     
                     if (status === 'SUCCEEDED') {
                         clearInterval(pollInterval);
-                        showStatus('✅ Feed generated! Loading results...', 'success');
+                        showStatus('Feed generated! Loading results...', 'success');
                         await loadFeedFromApify(data.data.defaultDatasetId);
                         const runBtn = document.querySelector('.run-btn');
                         runBtn.disabled = false;
@@ -1196,7 +1190,7 @@
                 const feeds = await response.json();
 
                 if (!feeds || feeds.length === 0) {
-                    showStatus('⚠️ No feed items found. Try different RSS feeds or check the logs.', 'error');
+                    showStatus('No feed items found. Try different RSS feeds or check the logs.', 'error');
                     return;
                 }
 
@@ -1254,7 +1248,7 @@
                     <div class="summary">
                         <strong>Original:</strong><br>
                         ${escapeHtml(item.summary).replace(/\n\n/g, '<br><br>')}
-                        ${item.translation ? `<br><br><strong>Translation:</strong><br><span class="${isChineseLanguage() ? 'chinese-text' : ''}">${isChineseLanguage() ? addPinyinToChinese(item.translation).replace(/\n\n/g, '<br><br>') : escapeHtml(item.translation).replace(/\n\n/g, '<br><br>')}</span>` : ''}
+                        ${item.translation ? `<br><br><strong>Translation:</strong><br><span class="${isChineseLanguage() ? 'chinese-text' : ''}">${item.translationPinyin ? item.translationPinyin.replace(/\n\n/g, '<br><br>') : escapeHtml(item.translation).replace(/\n\n/g, '<br><br>')}</span>` : ''}
                     </div>
                     
                     <div class="card-footer">
@@ -1275,114 +1269,8 @@
             return div.innerHTML;
         }
         
-        // Convert Chinese text to ruby annotations with pinyin
-        function addPinyinToChinese(text) {
-            if (!text || typeof text !== 'string') {
-                console.warn('addPinyinToChinese: Invalid text input');
-                return text || '';
-            }
-            
-            // Check if text contains Chinese characters
-            const chineseRegex = /[\u4e00-\u9fff]/;
-            if (!chineseRegex.test(text)) {
-                return escapeHtml(text);
-            }
-            
-            console.log('Processing Chinese text for pinyin, length:', text.length);
-            
-            // Try multiple ways to access pinyin-pro library
-            let pinyinLib = null;
-            if (window.pinyinPro && typeof window.pinyinPro.pinyin === 'function') {
-                pinyinLib = window.pinyinPro;
-                console.log('Using window.pinyinPro');
-            } else if (typeof pinyinPro !== 'undefined' && typeof pinyinPro.pinyin === 'function') {
-                pinyinLib = pinyinPro;
-                console.log('Using pinyinPro');
-            } else if (typeof pinyin !== 'undefined') {
-                pinyinLib = { pinyin: pinyin };
-                console.log('Using pinyin function directly');
-            }
-            
-            if (pinyinLib && typeof pinyinLib.pinyin === 'function') {
-                let result = '';
-                const lines = text.split('\n');
-                
-                for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-                    const line = lines[lineIdx];
-                    for (let i = 0; i < line.length; i++) {
-                        const char = line[i];
-                        if (chineseRegex.test(char)) {
-                            try {
-                                // Get pinyin for the character - try different API formats
-                                let pinyinText = '';
-                                
-                                // Try array format
-                                try {
-                                    const pinyinResult = pinyinLib.pinyin(char, { 
-                                        toneType: 'none',
-                                        type: 'array'
-                                    });
-                                    if (Array.isArray(pinyinResult) && pinyinResult.length > 0) {
-                                        pinyinText = pinyinResult[0];
-                                    }
-                                } catch (e1) {
-                                    // Try string format
-                                    try {
-                                        const pinyinResult = pinyinLib.pinyin(char, { 
-                                            toneType: 'none'
-                                        });
-                                        if (typeof pinyinResult === 'string') {
-                                            pinyinText = pinyinResult;
-                                        } else if (Array.isArray(pinyinResult) && pinyinResult.length > 0) {
-                                            pinyinText = pinyinResult[0];
-                                        }
-                                    } catch (e2) {
-                                        // Try simple call
-                                        try {
-                                            const pinyinResult = pinyinLib.pinyin(char);
-                                            if (typeof pinyinResult === 'string') {
-                                                pinyinText = pinyinResult;
-                                            } else if (Array.isArray(pinyinResult) && pinyinResult.length > 0) {
-                                                pinyinText = pinyinResult[0];
-                                            }
-                                        } catch (e3) {
-                                            console.warn('All pinyin conversion methods failed for:', char);
-                                        }
-                                    }
-                                }
-                                
-                                if (pinyinText) {
-                                    result += `<ruby><rb>${escapeHtml(char)}</rb><rt>${escapeHtml(pinyinText)}</rt></ruby>`;
-                                } else {
-                                    result += escapeHtml(char);
-                                }
-                            } catch (e) {
-                                console.warn('Pinyin conversion error for char "' + char + '":', e);
-                                result += escapeHtml(char);
-                            }
-                        } else {
-                            result += escapeHtml(char);
-                        }
-                    }
-                    if (lineIdx < lines.length - 1) {
-                        result += '<br>';
-                    }
-                }
-                console.log('Pinyin conversion complete, result length:', result.length);
-                return result;
-            } else {
-                // Fallback: just escape HTML if library not loaded
-                console.error('❌ Pinyin library not available. Debug info:', {
-                    hasWindowPinyinPro: !!window.pinyinPro,
-                    windowPinyinProType: typeof window.pinyinPro,
-                    hasPinyinPro: typeof pinyinPro !== 'undefined',
-                    pinyinProType: typeof pinyinPro,
-                    hasPinyin: typeof pinyin !== 'undefined',
-                    pinyinType: typeof pinyin
-                });
-                return escapeHtml(text);
-            }
-        }
+        // Pinyin is now generated on the backend (Apify Actor) using pinyin-pro library
+        // The frontend just displays the pre-generated HTML with ruby tags
         
         // Check if current language is Chinese
         function isChineseLanguage() {
