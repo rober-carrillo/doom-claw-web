@@ -4,12 +4,12 @@
 <meta http-equiv="content-type" content="text/html; charset=UTF-8">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Doom Claw - Control Panel</title>
+    <title>Doom Claw</title>
     <link rel="icon" type="image/png" href="icon.png">
     <style>
         @font-face {
             font-family: 'Oblata';
-            src: url('oblata-display-font/OblataDisplayRegular-Zp8o8.otf') format('opentype');
+            src: url('/oblata-display-font/OblataDisplayRegular-Zp8o8.otf') format('opentype');
             font-weight: normal;
             font-style: normal;
         }
@@ -493,7 +493,78 @@
                 gap: 10px;
             }
         }
+        /* Chinese text with pinyin styling */
+        .chinese-text {
+            letter-spacing: 0.5em;
+            line-height: 2.5;
+            word-spacing: 0.8em;
+            font-size: 1.1em;
+        }
+        
+        .chinese-text ruby {
+            margin: 0 0.2em;
+            display: inline-block;
+            vertical-align: top;
+        }
+        
+        .chinese-text rt {
+            font-size: 0.5em;
+            color: #888888;
+            font-weight: 300;
+            opacity: 0.8;
+            text-align: center;
+            display: block;
+            line-height: 1.1;
+            margin-bottom: 3px;
+            letter-spacing: 0.1em;
+        }
+        
+        .chinese-text rb {
+            font-size: 1em;
+            display: block;
+            line-height: 1.3;
+        }
     </style>
+    <!-- Pinyin conversion library -->
+    <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.14.0/dist/index.js" onload="console.log('Pinyin library script loaded')"></script>
+    <script>
+        // Wait for pinyin-pro to load and make it globally available
+        (function() {
+            function initPinyin() {
+                // Try different ways the library might be exposed
+                if (typeof pinyinPro !== 'undefined') {
+                    window.pinyinPro = pinyinPro;
+                    console.log('✅ Pinyin library loaded: pinyinPro');
+                    return true;
+                } else if (typeof window.pinyinPro !== 'undefined') {
+                    console.log('✅ Pinyin library loaded: window.pinyinPro');
+                    return true;
+                } else if (typeof pinyin !== 'undefined') {
+                    window.pinyinPro = { pinyin: pinyin };
+                    console.log('✅ Pinyin library loaded: pinyin');
+                    return true;
+                }
+                return false;
+            }
+            
+            // Try immediately
+            if (!initPinyin()) {
+                // Try on load
+                window.addEventListener('load', function() {
+                    if (!initPinyin()) {
+                        console.warn('⚠️ Pinyin library not found after page load');
+                    }
+                });
+                
+                // Also try after a short delay
+                setTimeout(function() {
+                    if (!initPinyin()) {
+                        console.warn('⚠️ Pinyin library not found after delay');
+                    }
+                }, 1000);
+            }
+        })();
+    </script>
 </head>
 <body>
     <div class="container">
@@ -710,7 +781,7 @@
                 <div class="form-group">
                     <label for="moodFilter">Mood Filter</label>
                     <select id="moodFilter">
-                        <option value="latest" selected="selected">Latest - All recent news</option>
+                        <option value="latest" selected="selected">Latest - All recent news (faster, no AI filtering)</option>
                         <option value="chill">Chill - Only positive/uplifting news</option>
                         <option value="doom">Doom - Entertainment/less relevant news</option>
                     </select>
@@ -938,7 +1009,7 @@
             document.getElementById('feedPanel').style.display = 'none';
             document.getElementById('debugConsole').innerHTML = '';
 
-            showStatus('Pulling from feeds and processing with AI...', 'info');
+            showStatus('🦞 Pulling from feeds and processing with AI...', 'info');
 
             try {
                 // OpenAI API key is stored in Apify Actor's secrets, not needed here
@@ -954,14 +1025,42 @@
                         action: 'start',
                         ...config
                     })
+                }).catch(error => {
+                    console.error('Fetch error:', error);
+                    throw new Error(`Network error: ${error.message}. Make sure the Vercel proxy is deployed and accessible.`);
                 });
 
                 if (!runResponse.ok) {
-                    const errorData = await runResponse.json();
+                    let errorData;
+                    const contentType = runResponse.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        try {
+                            errorData = await runResponse.json();
+                        } catch (e) {
+                            errorData = { error: { message: `HTTP ${runResponse.status}: ${runResponse.statusText}` } };
+                        }
+                    } else {
+                        const text = await runResponse.text();
+                        errorData = { error: { message: `HTTP ${runResponse.status}: ${runResponse.statusText}. Response: ${text.substring(0, 200)}` } };
+                    }
                     throw new Error(errorData.error?.message || 'Failed to start Actor on Apify');
                 }
 
+                // Check if response is JSON before parsing
+                const contentType = runResponse.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await runResponse.text();
+                    throw new Error(`Expected JSON but got ${contentType}. Response: ${text.substring(0, 200)}`);
+                }
+
                 const runData = await runResponse.json();
+                
+                // Check if runData has the expected structure
+                if (!runData || !runData.data || !runData.data.id) {
+                    console.error('Unexpected response structure:', runData);
+                    throw new Error('Invalid response from proxy. Expected { data: { id: ... } }');
+                }
+                
                 currentRunId = runData.data.id;
                 
                 updateDebugConsole([`🚀 Actor started (Run ID: ${currentRunId})`, '⏳ Processing feeds with AI...']);
@@ -990,9 +1089,20 @@
                             action: 'status',
                             runId: runId
                         })
+                    }).catch(error => {
+                        console.error('Status check error:', error);
+                        throw new Error(`Network error: ${error.message}`);
                     });
                     
-                    if (!response.ok) throw new Error('Failed to check run status');
+                    if (!response.ok) {
+                        let errorData;
+                        try {
+                            errorData = await response.json();
+                        } catch (e) {
+                            errorData = { error: { message: `HTTP ${response.status}` } };
+                        }
+                        throw new Error(errorData.error?.message || 'Failed to check run status');
+                    }
                     
                     const data = await response.json();
                     const status = data.data.status;
@@ -1068,9 +1178,20 @@
                         action: 'dataset',
                         datasetId: datasetId
                     })
+                }).catch(error => {
+                    console.error('Load feed error:', error);
+                    throw new Error(`Network error: ${error.message}`);
                 });
 
-                if (!response.ok) throw new Error('Failed to load feed from Apify');
+                if (!response.ok) {
+                    let errorData;
+                    try {
+                        errorData = await response.json();
+                    } catch (e) {
+                        errorData = { error: { message: `HTTP ${response.status}` } };
+                    }
+                    throw new Error(errorData.error?.message || 'Failed to load feed from Apify');
+                }
 
                 const feeds = await response.json();
 
@@ -1133,7 +1254,7 @@
                     <div class="summary">
                         <strong>Original:</strong><br>
                         ${escapeHtml(item.summary).replace(/\n\n/g, '<br><br>')}
-                        ${item.translation ? `<br><br><strong>Translation:</strong><br>${escapeHtml(item.translation).replace(/\n\n/g, '<br><br>')}` : ''}
+                        ${item.translation ? `<br><br><strong>Translation:</strong><br><span class="${isChineseLanguage() ? 'chinese-text' : ''}">${isChineseLanguage() ? addPinyinToChinese(item.translation).replace(/\n\n/g, '<br><br>') : escapeHtml(item.translation).replace(/\n\n/g, '<br><br>')}</span>` : ''}
                     </div>
                     
                     <div class="card-footer">
@@ -1152,6 +1273,121 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+        
+        // Convert Chinese text to ruby annotations with pinyin
+        function addPinyinToChinese(text) {
+            if (!text || typeof text !== 'string') {
+                console.warn('addPinyinToChinese: Invalid text input');
+                return text || '';
+            }
+            
+            // Check if text contains Chinese characters
+            const chineseRegex = /[\u4e00-\u9fff]/;
+            if (!chineseRegex.test(text)) {
+                return escapeHtml(text);
+            }
+            
+            console.log('Processing Chinese text for pinyin, length:', text.length);
+            
+            // Try multiple ways to access pinyin-pro library
+            let pinyinLib = null;
+            if (window.pinyinPro && typeof window.pinyinPro.pinyin === 'function') {
+                pinyinLib = window.pinyinPro;
+                console.log('Using window.pinyinPro');
+            } else if (typeof pinyinPro !== 'undefined' && typeof pinyinPro.pinyin === 'function') {
+                pinyinLib = pinyinPro;
+                console.log('Using pinyinPro');
+            } else if (typeof pinyin !== 'undefined') {
+                pinyinLib = { pinyin: pinyin };
+                console.log('Using pinyin function directly');
+            }
+            
+            if (pinyinLib && typeof pinyinLib.pinyin === 'function') {
+                let result = '';
+                const lines = text.split('\n');
+                
+                for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+                    const line = lines[lineIdx];
+                    for (let i = 0; i < line.length; i++) {
+                        const char = line[i];
+                        if (chineseRegex.test(char)) {
+                            try {
+                                // Get pinyin for the character - try different API formats
+                                let pinyinText = '';
+                                
+                                // Try array format
+                                try {
+                                    const pinyinResult = pinyinLib.pinyin(char, { 
+                                        toneType: 'none',
+                                        type: 'array'
+                                    });
+                                    if (Array.isArray(pinyinResult) && pinyinResult.length > 0) {
+                                        pinyinText = pinyinResult[0];
+                                    }
+                                } catch (e1) {
+                                    // Try string format
+                                    try {
+                                        const pinyinResult = pinyinLib.pinyin(char, { 
+                                            toneType: 'none'
+                                        });
+                                        if (typeof pinyinResult === 'string') {
+                                            pinyinText = pinyinResult;
+                                        } else if (Array.isArray(pinyinResult) && pinyinResult.length > 0) {
+                                            pinyinText = pinyinResult[0];
+                                        }
+                                    } catch (e2) {
+                                        // Try simple call
+                                        try {
+                                            const pinyinResult = pinyinLib.pinyin(char);
+                                            if (typeof pinyinResult === 'string') {
+                                                pinyinText = pinyinResult;
+                                            } else if (Array.isArray(pinyinResult) && pinyinResult.length > 0) {
+                                                pinyinText = pinyinResult[0];
+                                            }
+                                        } catch (e3) {
+                                            console.warn('All pinyin conversion methods failed for:', char);
+                                        }
+                                    }
+                                }
+                                
+                                if (pinyinText) {
+                                    result += `<ruby><rb>${escapeHtml(char)}</rb><rt>${escapeHtml(pinyinText)}</rt></ruby>`;
+                                } else {
+                                    result += escapeHtml(char);
+                                }
+                            } catch (e) {
+                                console.warn('Pinyin conversion error for char "' + char + '":', e);
+                                result += escapeHtml(char);
+                            }
+                        } else {
+                            result += escapeHtml(char);
+                        }
+                    }
+                    if (lineIdx < lines.length - 1) {
+                        result += '<br>';
+                    }
+                }
+                console.log('Pinyin conversion complete, result length:', result.length);
+                return result;
+            } else {
+                // Fallback: just escape HTML if library not loaded
+                console.error('❌ Pinyin library not available. Debug info:', {
+                    hasWindowPinyinPro: !!window.pinyinPro,
+                    windowPinyinProType: typeof window.pinyinPro,
+                    hasPinyinPro: typeof pinyinPro !== 'undefined',
+                    pinyinProType: typeof pinyinPro,
+                    hasPinyin: typeof pinyin !== 'undefined',
+                    pinyinType: typeof pinyin
+                });
+                return escapeHtml(text);
+            }
+        }
+        
+        // Check if current language is Chinese
+        function isChineseLanguage() {
+            const lang = document.getElementById('targetLanguage')?.value || '';
+            return lang.toLowerCase().includes('chinese');
         }
 
         function formatDate(dateString) {
