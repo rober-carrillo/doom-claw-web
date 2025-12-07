@@ -1213,6 +1213,7 @@
                     title: item.title || 'Untitled',
                     summary: item.summary || 'No summary available',
                     translation: item.translation || null,
+                    translationPinyin: item.translationPinyin || null, // Include pinyin from Actor
                     url: item.url || '#',
                     source: item.source || 'Unknown',
                     timestamp: item.publishedDate || item.timestamp || new Date().toISOString()
@@ -1253,7 +1254,7 @@
                     <div class="summary">
                         <strong>Original:</strong><br>
                         ${escapeHtml(item.summary).replace(/\n\n/g, '<br><br>')}
-                        ${item.translation ? `<br><br><strong>Translation:</strong><br><span class="${isChineseLanguage() ? 'chinese-text' : ''}">${item.translationPinyin ? item.translationPinyin.replace(/\n\n/g, '<br><br>') : (isChineseLanguage() ? addPinyinToChineseClientSide(item.translation).replace(/\n\n/g, '<br><br>') : escapeHtml(item.translation).replace(/\n\n/g, '<br><br>'))}</span>` : ''}
+                        ${item.translation ? `<br><br><strong>Translation:</strong><br><span class="${isChineseLanguage() ? 'chinese-text' : ''}">${item.translationPinyin ? (console.log('🟢 Using BACKEND pinyin (from Actor)'), item.translationPinyin.replace(/\n\n/g, '<br><br>')) : (isChineseLanguage() ? addPinyinToChineseClientSide(item.translation).replace(/\n\n/g, '<br><br>') : escapeHtml(item.translation).replace(/\n\n/g, '<br><br>'))}</span>` : ''}
                     </div>
                     
                     <div class="card-footer">
@@ -1290,18 +1291,21 @@
             }
             
             if (pinyinLib) {
+                console.log('🔵 Using FRONTEND pinyin generation (client-side fallback)');
                 let result = '';
                 for (let i = 0; i < text.length; i++) {
                     const char = text[i];
                     if (chineseRegex.test(char)) {
                         try {
-                            const pinyinText = pinyinLib.pinyin(char, { toneType: 'none' });
+                            // Get pinyin WITH tone marks (symbol format: wǒ, nǐ, etc.)
+                            const pinyinText = pinyinLib.pinyin(char, { toneType: 'symbol' });
                             if (pinyinText) {
                                 result += `<ruby><rb>${escapeHtml(char)}</rb><rt>${escapeHtml(pinyinText)}</rt></ruby>`;
                             } else {
                                 result += escapeHtml(char);
                             }
                         } catch (e) {
+                            console.warn('Pinyin conversion error:', e);
                             result += escapeHtml(char);
                         }
                     } else {
