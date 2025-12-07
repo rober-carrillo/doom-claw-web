@@ -423,26 +423,28 @@
 
         .stats {
             display: flex;
-            gap: 20px;
-            justify-content: space-around;
-            padding: 20px;
+            gap: 15px;
+            justify-content: flex-start;
+            padding: 10px 15px;
             background: var(--color-c);
             border-radius: 8px;
             margin-bottom: 20px;
+            font-size: 0.9rem;
+            flex-wrap: wrap;
         }
 
         .stat-item {
-            text-align: center;
+            display: inline;
+            color: var(--color-text);
         }
 
         .stat-value {
-            font-size: 1.3rem;
             font-weight: bold;
             color: var(--color-highlight);
         }
 
         .stat-label {
-            font-size: 0.85rem;
+            font-weight: normal;
             color: var(--color-text);
         }
 
@@ -560,7 +562,17 @@
             color: #000000;
         }
     </style>
-    <!-- Pinyin is now generated on the backend (Apify Actor) using pinyin-pro library -->
+    <!-- Pinyin library for client-side fallback (if Actor hasn't generated it yet) -->
+    <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.14.0/dist/index.js"></script>
+    <script>
+        // Ensure pinyin-pro is available after load
+        window.addEventListener('load', function() {
+            if (typeof pinyinPro !== 'undefined') {
+                window.pinyinPro = pinyinPro;
+                console.log('Pinyin library loaded for client-side fallback');
+            }
+        });
+    </script>
 </head>
 <body>
     <div class="container">
@@ -1223,18 +1235,9 @@
             // Update stats
             const sources = [...new Set(items.map(item => item.source))];
             stats.innerHTML = `
-                <div class="stat-item">
-                    <div class="stat-value">${items.length}</div>
-                    <div class="stat-label">Total Items</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value">${sources.length}</div>
-                    <div class="stat-label">Sources</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value">${new Date().toLocaleTimeString()}</div>
-                    <div class="stat-label">Generated At</div>
-                </div>
+                <span class="stat-item"><span class="stat-value">${items.length}</span> <span class="stat-label">Total Items</span></span>
+                <span class="stat-item"><span class="stat-value">${sources.length}</span> <span class="stat-label">Sources</span></span>
+                <span class="stat-item"><span class="stat-value">${new Date().toLocaleTimeString()}</span> <span class="stat-label">Generated At</span></span>
             `;
 
             // Display feed items
@@ -1250,7 +1253,7 @@
                     <div class="summary">
                         <strong>Original:</strong><br>
                         ${escapeHtml(item.summary).replace(/\n\n/g, '<br><br>')}
-                        ${item.translation ? `<br><br><strong>Translation:</strong><br><span class="${isChineseLanguage() ? 'chinese-text' : ''}">${item.translationPinyin ? item.translationPinyin.replace(/\n\n/g, '<br><br>') : escapeHtml(item.translation).replace(/\n\n/g, '<br><br>')}</span>` : ''}
+                        ${item.translation ? `<br><br><strong>Translation:</strong><br><span class="${isChineseLanguage() ? 'chinese-text' : ''}">${item.translationPinyin ? item.translationPinyin.replace(/\n\n/g, '<br><br>') : (isChineseLanguage() ? addPinyinToChineseClientSide(item.translation).replace(/\n\n/g, '<br><br>') : escapeHtml(item.translation).replace(/\n\n/g, '<br><br>'))}</span>` : ''}
                     </div>
                     
                     <div class="card-footer">
@@ -1271,8 +1274,46 @@
             return div.innerHTML;
         }
         
-        // Pinyin is now generated on the backend (Apify Actor) using pinyin-pro library
-        // The frontend just displays the pre-generated HTML with ruby tags
+        // Client-side pinyin fallback (if Actor hasn't generated it yet)
+        function addPinyinToChineseClientSide(text) {
+            if (!text || typeof text !== 'string') return text;
+            
+            const chineseRegex = /[\u4e00-\u9fff]/;
+            if (!chineseRegex.test(text)) return escapeHtml(text);
+            
+            // Try to use pinyin-pro if available
+            let pinyinLib = null;
+            if (typeof pinyinPro !== 'undefined' && typeof pinyinPro.pinyin === 'function') {
+                pinyinLib = pinyinPro;
+            } else if (window.pinyinPro && typeof window.pinyinPro.pinyin === 'function') {
+                pinyinLib = window.pinyinPro;
+            }
+            
+            if (pinyinLib) {
+                let result = '';
+                for (let i = 0; i < text.length; i++) {
+                    const char = text[i];
+                    if (chineseRegex.test(char)) {
+                        try {
+                            const pinyinText = pinyinLib.pinyin(char, { toneType: 'none' });
+                            if (pinyinText) {
+                                result += `<ruby><rb>${escapeHtml(char)}</rb><rt>${escapeHtml(pinyinText)}</rt></ruby>`;
+                            } else {
+                                result += escapeHtml(char);
+                            }
+                        } catch (e) {
+                            result += escapeHtml(char);
+                        }
+                    } else {
+                        result += escapeHtml(char);
+                    }
+                }
+                return result;
+            }
+            
+            // Fallback: just return escaped text
+            return escapeHtml(text);
+        }
         
         // Check if current language is Chinese
         function isChineseLanguage() {
