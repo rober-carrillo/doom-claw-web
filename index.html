@@ -4,12 +4,12 @@
 <meta http-equiv="content-type" content="text/html; charset=UTF-8">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Doom Claw 🦞 - Control Panel</title>
-    <link rel="icon" type="image/png" href="/icon.png">
+    <title>Doom Claw - Control Panel</title>
+    <link rel="icon" type="image/png" href="icon.png">
     <style>
         @font-face {
             font-family: 'Oblata';
-            src: url('/oblata-display-font/OblataDisplayRegular-Zp8o8.otf') format('opentype');
+            src: url('oblata-display-font/OblataDisplayRegular-Zp8o8.otf') format('opentype');
             font-weight: normal;
             font-style: normal;
         }
@@ -498,7 +498,7 @@
 <body>
     <div class="container">
         <header>
-            <h1><img src="/icon.png" alt="Doom Claw" style="height: 60px; vertical-align: middle; margin-right: 15px;">Doom Claw</h1>
+            <h1><img src="icon.png" alt="Doom Claw" style="height: 60px; vertical-align: middle; margin-right: 15px;">Doom Claw</h1>
             <p class="tagline">Your AI-powered feed aggregator. Take control.</p>
         </header>
 
@@ -938,7 +938,7 @@
             document.getElementById('feedPanel').style.display = 'none';
             document.getElementById('debugConsole').innerHTML = '';
 
-            showStatus('🦞 Pulling from feeds and processing with AI...', 'info');
+            showStatus('Pulling from feeds and processing with AI...', 'info');
 
             try {
                 // OpenAI API key is stored in Apify Actor's secrets, not needed here

@@ -1,4 +1,4 @@
-# Doom Claw 🦞 - Web Interface
+# Doom Claw - Web Interface
 
 AI-powered RSS feed aggregator with smart filtering, translation, and summarization.
 
@@ -40,4 +40,4 @@ This is a demo version with a shared OpenAI API key. Processing is done via the 
 
 ## 💡 About
 
-Created for intelligent content aggregation - take control of your news feed and stop doom scrolling! 🦞
+Created for intelligent content aggregation - take control of your news feed and stop doom scrolling!
